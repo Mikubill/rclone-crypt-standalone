@@ -1,0 +1,42 @@
+on: [push, pull_request]
+name: build
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: install
+        uses: actions/setup-go@v1
+        with:
+          go-version: 1.17.x
+
+      - name: checkout
+        uses: actions/checkout@v1
+
+      - name: go-test
+        run: |
+          go test -v ./...
+
+      - name: build
+        run: |
+          GOOS=windows GOARCH=amd64 go build -ldflags '-s -w -extldflags "-static"' -o bin/ci-test-windows-amd64.exe
+          GOOS=linux   GOARCH=amd64 go build -ldflags '-s -w -extldflags "-static"' -o bin/ci-test-linux-amd64
+
+      - name: enc-test
+        run: |
+          pwd=$(./bin/ci-test-linux-amd64 obscure abcd)
+          salt=$(./bin/ci-test-linux-amd64 obscure 1234)
+          ./bin/ci-test-linux-amd64 encrypt ci-test-linux-amd64 -p $pwd -s $salt -o ci-test-linux-amd64.enc
+          ./bin/ci-test-linux-amd64 decrypt ci-test-linux-amd64.enc -p $pwd -s $salt -o ci-test-linux-amd64.dec
+          diff ci-test-linux-amd64 ci-test-linux-amd64.dec || exit 1
+
+      - name: upload to github
+        uses: actions/upload-artifact@v1
+        with:
+          name: bin
+          path: bin
+          target_directory: bin
+          cache_key: bin
+          upload_files:
+            - ci-test-windows-amd64.exe
+            - ci-test-linux-amd64
+            
